@@ -1,5 +1,34 @@
 # Enterprise Integration Hub
 
+## Contract Consistency
+
+REST e SOAP têm formatos e protocolos diferentes, mas preservam as mesmas regras de negócio para identificadores, campos obrigatórios, limites e validações de Patient e Appointment. Quando e-mail ou telefone não estiverem disponíveis em uma resposta de paciente, o campo REST é omitido e o elemento SOAP também é omitido. O mapeamento de erros mantém uma semântica comum nas duas bordas; detalhes de implementação permanecem fora dos contratos.
+
+| REST | SOAP | Regra |
+| --- | --- | --- |
+| HTTP 404 `PATIENT_NOT_FOUND` | `PATIENT_NOT_FOUND` | O paciente solicitado não existe. |
+| HTTP 404 `APPOINTMENT_NOT_FOUND` | `APPOINTMENT_NOT_FOUND` | O agendamento solicitado não existe. |
+| HTTP 409 `DUPLICATE_PATIENT` | `DUPLICATE_PATIENT` | Já existe paciente para o CPF informado. |
+| HTTP 409 `APPOINTMENT_CONFLICT` | `INVALID_APPOINTMENT` | O horário solicitado não está disponível. |
+| HTTP 422 `VALIDATION_ERROR` | `INVALID_PATIENT` | Dados de paciente violam o contrato; validações de agendamento usam `INVALID_APPOINTMENT`. |
+| HTTP 500 `INTERNAL_ERROR` | `INTERNAL_ERROR` | Falha interna sem detalhes técnicos expostos. |
+
+## Contract-First
+
+Contract-first significa definir, revisar e versionar os contratos de integração antes de implementar os adapters ou regras de aplicação. No Hospital Vida Integrada, isso estabelece uma fronteira clara entre o sistema legado SOAP/XML, os consumidores REST/JSON e o futuro núcleo de integração.
+
+Contratos reduzem ambiguidades, permitem validação independente e oferecem uma base estável para as equipes consumidoras. O OpenAPI descreve recursos REST, mensagens JSON e respostas HTTP; WSDL e XSD descrevem operações SOAP, envelopes XML, tipos e faults. Nas próximas fases, os adapters REST e SOAP serão implementados contra estes artefatos, sem alterar o modelo conceitual de Patient e Appointment.
+
+## Contratos
+
+| Interface | Contrato | Formato |
+| --- | --- | --- |
+| REST | [OpenAPI](contracts/openapi/openapi.yaml) | JSON/HTTP |
+| SOAP | [WSDL](contracts/soap/service.wsdl) | XML/SOAP |
+| XML | [XSD](contracts/soap/xsd/patient.xsd) e [XSD](contracts/soap/xsd/appointment.xsd) | XML |
+
+Os exemplos de mensagens REST e SOAP estão em [contracts/examples](contracts/examples/).
+
 Uma fundação de portfólio profissional para demonstrar integração de sistemas corporativos de saúde. O projeto conectará sistemas hospitalares legados baseados em SOAP/XML a aplicações modernas orientadas a REST/JSON, preservando uma camada de integração explícita e auditável.
 
 > Estado atual: fundação arquitetural e documental. Nenhum endpoint REST ou SOAP, banco de dados funcional ou dependência de aplicação foi implementado nesta etapa.
@@ -74,7 +103,7 @@ Nenhuma dependência é declarada nesta fase; elas serão introduzidas apenas qu
 ## Roadmap
 
 - [x] Fundação do repositório e documentação arquitetural
-- [ ] Definir contratos de integração (OpenAPI, WSDL e XSD)
+- [x] Definir contratos de integração (OpenAPI, WSDL e XSD) — Fase 2 concluída
 - [ ] Criar a estrutura de aplicação Python e as interfaces REST e SOAP
 - [ ] Implementar modelo interno, transformações XML/JSON e tratamento de erros
 - [ ] Adicionar persistência PostgreSQL e migrações
@@ -85,4 +114,3 @@ Nenhuma dependência é declarada nesta fase; elas serão introduzidas apenas qu
 ## Próximos passos
 
 Após a revisão desta fundação, a próxima fase deve começar pelos contratos e pela estrutura de aplicação, mantendo REST, SOAP e persistência desacoplados da lógica de transformação.
-

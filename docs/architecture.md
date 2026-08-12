@@ -6,6 +6,35 @@ O Enterprise Integration Hub será uma plataforma de integração para interoper
 
 Nesta etapa, esta é uma arquitetura-alvo: não há serviços, banco de dados, contratos executáveis ou dependências instaladas.
 
+## Contract-First Architecture
+
+Os contratos são definidos antes da implementação dos adapters. O [OpenAPI](../contracts/openapi/openapi.yaml) é a fonte da fronteira REST e orientará o REST Adapter. O [WSDL](../contracts/soap/service.wsdl), apoiado pelos XSDs de [Patient](../contracts/soap/xsd/patient.xsd) e [Appointment](../contracts/soap/xsd/appointment.xsd), é a fonte da fronteira SOAP e orientará o SOAP Adapter.
+
+```text
+OpenAPI                         WSDL + XSD
+   |                                |
+   v                                v
+REST Adapter                    SOAP Adapter
+   \\                                /
+    \\                              /
+     +---- Integration Core -------+
+```
+
+Ambos os adapters traduzirão seus formatos de transporte para o mesmo modelo conceitual interno. Isso mantém detalhes de HTTP/JSON e SOAP/XML nas bordas e permite implementar, testar e evoluir cada interface sem tornar um protocolo dependente do outro.
+
+## Contract Consistency
+
+Os contratos REST e SOAP não compartilham a mesma sintaxe, mas devem preservar regras equivalentes para UUIDs, obrigatoriedade, limites de texto e validações de Patient e Appointment. Campos opcionais sem informação são omitidos tanto no JSON REST quanto no XML SOAP. A tradução de erros é uma responsabilidade explícita do adapter, conforme o seguinte mapeamento.
+
+| REST | SOAP | Regra |
+| --- | --- | --- |
+| HTTP 404 `PATIENT_NOT_FOUND` | `PATIENT_NOT_FOUND` | Paciente inexistente. |
+| HTTP 404 `APPOINTMENT_NOT_FOUND` | `APPOINTMENT_NOT_FOUND` | Agendamento inexistente. |
+| HTTP 409 `DUPLICATE_PATIENT` | `DUPLICATE_PATIENT` | CPF já cadastrado. |
+| HTTP 409 `APPOINTMENT_CONFLICT` | `INVALID_APPOINTMENT` | Horário de agendamento indisponível. |
+| HTTP 422 `VALIDATION_ERROR` | `INVALID_PATIENT` | Dados de paciente inválidos; dados de agendamento usam `INVALID_APPOINTMENT`. |
+| HTTP 500 `INTERNAL_ERROR` | `INTERNAL_ERROR` | Falha inesperada segura para o consumidor. |
+
 ## Componentes
 
 | Componente | Responsabilidade futura |
@@ -79,4 +108,3 @@ Os detalhes técnicos deverão permanecer nos logs correlacionados, evitando vaz
 - Métricas, tracing e alertas operacionais.
 - Mascaramento de dados e trilhas de auditoria adequadas ao contexto de saúde.
 - Estratégia de testes de contrato, integração e ponta a ponta.
-

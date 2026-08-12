@@ -1,0 +1,232 @@
+openapi: 3.0.3
+info:
+  title: Hospital Vida Integrada - Enterprise Integration Hub API
+  version: 1.0.0
+  description: |
+    Contrato REST contract-first do Hospital Vida Integrada. Esta especificação
+    descreve a fronteira HTTP/JSON; não representa uma implementação executável.
+servers:
+  - url: https://api.example.invalid
+    description: Placeholder do ambiente de integração
+tags:
+  - name: Health
+  - name: Patients
+  - name: Appointments
+paths:
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Consultar disponibilidade da API
+      description: Retorna o estado de disponibilidade da interface REST.
+      responses:
+        '200':
+          description: Interface disponível.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example: { status: healthy }
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/patients:
+    get:
+      tags: [Patients]
+      summary: Listar pacientes
+      description: Lista pacientes cadastrados, com paginação baseada em deslocamento.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Lista obtida com sucesso.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Patients]
+      summary: Criar paciente
+      description: Cria um paciente. O identificador e os timestamps são gerados pelo sistema.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePatientRequest' }
+            example:
+              name: Ana Silva
+              cpf: '12345678901'
+              birth_date: '1990-05-12'
+              email: ana.silva@example.test
+              phone: '+5511999990000'
+      responses:
+        '201':
+          description: Paciente criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientResponse' }
+              examples:
+                createdPatient:
+                  summary: Paciente criado
+                  externalValue: ../examples/rest/create-patient-response.json
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Já existe paciente com o CPF informado.
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }, example: { code: DUPLICATE_PATIENT, message: A patient with this CPF already exists. } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/patients/{patient_id}:
+    get:
+      tags: [Patients]
+      summary: Consultar paciente por ID
+      description: Retorna os dados de um paciente cadastrado.
+      parameters: [ { $ref: '#/components/parameters/PatientId' } ]
+      responses:
+        '200':
+          description: Paciente encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientResponse' }
+              examples:
+                patient:
+                  summary: Paciente encontrado
+                  externalValue: ../examples/rest/get-patient-response.json
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/PatientNotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Patients]
+      summary: Atualizar dados permitidos de um paciente
+      description: Atualiza um ou mais dos campos name, email e phone. CPF e data de nascimento não podem ser alterados.
+      parameters: [ { $ref: '#/components/parameters/PatientId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePatientRequest' }
+      responses:
+        '200': { description: Paciente atualizado., content: { application/json: { schema: { $ref: '#/components/schemas/PatientResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/PatientNotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/appointments/{appointment_id}:
+    get:
+      tags: [Appointments]
+      summary: Consultar agendamento por ID
+      description: Retorna um agendamento existente.
+      parameters: [ { $ref: '#/components/parameters/AppointmentId' } ]
+      responses:
+        '200': { description: Agendamento encontrado., content: { application/json: { schema: { $ref: '#/components/schemas/AppointmentResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/AppointmentNotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/appointments:
+    post:
+      tags: [Appointments]
+      summary: Criar agendamento
+      description: Cria um agendamento para um paciente existente. ID, status inicial e timestamps são gerados pelo sistema.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAppointmentRequest' }
+            example: { patient_id: 'b2c33c6c-1d48-4fa1-9b3e-7db1828c0b91', appointment_date: '2030-09-20T14:30:00-03:00', specialty: Cardiology }
+      responses:
+        '201':
+          description: Agendamento criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppointmentResponse' }
+              examples:
+                createdAppointment:
+                  summary: Agendamento criado
+                  externalValue: ../examples/rest/create-appointment-response.json
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/PatientNotFound' }
+        '409': { description: Conflito de agenda., content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }, example: { code: APPOINTMENT_CONFLICT, message: The requested appointment slot is unavailable. } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+components:
+  parameters:
+    PatientId: { name: patient_id, in: path, required: true, description: UUID do paciente., schema: { type: string, format: uuid } }
+    AppointmentId: { name: appointment_id, in: path, required: true, description: UUID do agendamento., schema: { type: string, format: uuid } }
+    Limit: { name: limit, in: query, required: false, description: Máximo de itens retornados., schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    Offset: { name: offset, in: query, required: false, description: Quantidade de itens a ignorar., schema: { type: integer, minimum: 0, default: 0 } }
+  responses:
+    BadRequest: { description: Requisição malformada., content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }, example: { code: BAD_REQUEST, message: The request could not be parsed. } } } }
+    ValidationError: { description: Dados inválidos para o contrato., content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }, example: { code: VALIDATION_ERROR, message: One or more fields are invalid. } } } }
+    PatientNotFound: { description: Paciente não encontrado., content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }, example: { code: PATIENT_NOT_FOUND, message: Patient was not found. } } } }
+    AppointmentNotFound: { description: Agendamento não encontrado., content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }, example: { code: APPOINTMENT_NOT_FOUND, message: Appointment was not found. } } } }
+    InternalError: { description: Erro interno não detalhado., content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }, example: { code: INTERNAL_ERROR, message: An unexpected error occurred. } } } }
+  schemas:
+    HealthResponse: { type: object, required: [status], properties: { status: { type: string, enum: [healthy] } } }
+    CreatePatientRequest:
+      type: object
+      additionalProperties: false
+      required: [name, cpf, birth_date]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        cpf: { type: string, pattern: '^[0-9]{11}$', description: CPF somente com 11 dígitos numéricos. }
+        birth_date: { type: string, format: date }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$', description: Número E.164. }
+    UpdatePatientRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
+    PatientResponse:
+      type: object
+      additionalProperties: false
+      required: [id, name, cpf, birth_date, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        cpf: { type: string, pattern: '^[0-9]{11}$' }
+        birth_date: { type: string, format: date }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
+        created_at: { type: string, format: date-time, readOnly: true }
+        updated_at: { type: string, format: date-time, readOnly: true }
+    PatientListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, limit, offset, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/PatientResponse' } }
+        limit: { type: integer, minimum: 1 }
+        offset: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 0 }
+    CreateAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [patient_id, appointment_date, specialty]
+      properties:
+        patient_id: { type: string, format: uuid }
+        appointment_date: { type: string, format: date-time, description: Data e hora com offset de fuso horário. }
+        specialty: { type: string, minLength: 1, maxLength: 100 }
+    AppointmentResponse:
+      type: object
+      additionalProperties: false
+      required: [id, patient_id, appointment_date, specialty, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        patient_id: { type: string, format: uuid }
+        appointment_date: { type: string, format: date-time }
+        specialty: { type: string, minLength: 1, maxLength: 100 }
+        status: { type: string, enum: [SCHEDULED, CONFIRMED, CANCELLED, COMPLETED], readOnly: true }
+        created_at: { type: string, format: date-time, readOnly: true }
+        updated_at: { type: string, format: date-time, readOnly: true }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: { type: string, description: Código estável, legível por máquina. }
+        message: { type: string, description: Mensagem segura para o consumidor. }
+        correlation_id: { type: string, format: uuid, nullable: true }

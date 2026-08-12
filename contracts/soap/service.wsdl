@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://vida-integrada.example.com/services/hospital-integration/v1" xmlns:pt="http://vida-integrada.example.com/contracts/patient/v1" xmlns:ap="http://vida-integrada.example.com/contracts/appointment/v1" targetNamespace="http://vida-integrada.example.com/services/hospital-integration/v1" name="HospitalIntegrationService">
+  <wsdl:types><xs:schema><xs:import namespace="http://vida-integrada.example.com/contracts/patient/v1" schemaLocation="xsd/patient.xsd"/><xs:import namespace="http://vida-integrada.example.com/contracts/appointment/v1" schemaLocation="xsd/appointment.xsd"/></xs:schema></wsdl:types>
+  <wsdl:message name="CreatePatientInput"><wsdl:part name="parameters" element="pt:CreatePatientRequest"/></wsdl:message>
+  <wsdl:message name="CreatePatientOutput"><wsdl:part name="parameters" element="pt:CreatePatientResponse"/></wsdl:message>
+  <wsdl:message name="GetPatientInput"><wsdl:part name="parameters" element="pt:GetPatientRequest"/></wsdl:message>
+  <wsdl:message name="GetPatientOutput"><wsdl:part name="parameters" element="pt:GetPatientResponse"/></wsdl:message>
+  <wsdl:message name="UpdatePatientInput"><wsdl:part name="parameters" element="pt:UpdatePatientRequest"/></wsdl:message>
+  <wsdl:message name="UpdatePatientOutput"><wsdl:part name="parameters" element="pt:UpdatePatientResponse"/></wsdl:message>
+  <wsdl:message name="CreateAppointmentInput"><wsdl:part name="parameters" element="ap:CreateAppointmentRequest"/></wsdl:message>
+  <wsdl:message name="CreateAppointmentOutput"><wsdl:part name="parameters" element="ap:CreateAppointmentResponse"/></wsdl:message>
+  <wsdl:message name="GetAppointmentInput"><wsdl:part name="parameters" element="ap:GetAppointmentRequest"/></wsdl:message>
+  <wsdl:message name="GetAppointmentOutput"><wsdl:part name="parameters" element="ap:GetAppointmentResponse"/></wsdl:message>
+  <wsdl:message name="ServiceFaultMessage"><wsdl:part name="fault" element="pt:ServiceFault"/></wsdl:message>
+  <wsdl:portType name="HospitalIntegrationPortType">
+    <wsdl:operation name="CreatePatient"><wsdl:input message="tns:CreatePatientInput"/><wsdl:output message="tns:CreatePatientOutput"/><wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/></wsdl:operation>
+    <wsdl:operation name="GetPatient"><wsdl:input message="tns:GetPatientInput"/><wsdl:output message="tns:GetPatientOutput"/><wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/></wsdl:operation>
+    <wsdl:operation name="UpdatePatient"><wsdl:input message="tns:UpdatePatientInput"/><wsdl:output message="tns:UpdatePatientOutput"/><wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/></wsdl:operation>
+    <wsdl:operation name="CreateAppointment"><wsdl:input message="tns:CreateAppointmentInput"/><wsdl:output message="tns:CreateAppointmentOutput"/><wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/></wsdl:operation>
+    <wsdl:operation name="GetAppointment"><wsdl:input message="tns:GetAppointmentInput"/><wsdl:output message="tns:GetAppointmentOutput"/><wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/></wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="HospitalIntegrationSoapBinding" type="tns:HospitalIntegrationPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="CreatePatient"><soap:operation soapAction="http://vida-integrada.example.com/services/hospital-integration/v1/CreatePatient"/><wsdl:input><soap:body use="literal"/></wsdl:input><wsdl:output><soap:body use="literal"/></wsdl:output><wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault></wsdl:operation>
+    <wsdl:operation name="GetPatient"><soap:operation soapAction="http://vida-integrada.example.com/services/hospital-integration/v1/GetPatient"/><wsdl:input><soap:body use="literal"/></wsdl:input><wsdl:output><soap:body use="literal"/></wsdl:output><wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault></wsdl:operation>
+    <wsdl:operation name="UpdatePatient"><soap:operation soapAction="http://vida-integrada.example.com/services/hospital-integration/v1/UpdatePatient"/><wsdl:input><soap:body use="literal"/></wsdl:input><wsdl:output><soap:body use="literal"/></wsdl:output><wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault></wsdl:operation>
+    <wsdl:operation name="CreateAppointment"><soap:operation soapAction="http://vida-integrada.example.com/services/hospital-integration/v1/CreateAppointment"/><wsdl:input><soap:body use="literal"/></wsdl:input><wsdl:output><soap:body use="literal"/></wsdl:output><wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault></wsdl:operation>
+    <wsdl:operation name="GetAppointment"><soap:operation soapAction="http://vida-integrada.example.com/services/hospital-integration/v1/GetAppointment"/><wsdl:input><soap:body use="literal"/></wsdl:input><wsdl:output><soap:body use="literal"/></wsdl:output><wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault></wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="HospitalIntegrationService"><wsdl:documentation>SOAP 1.1 endpoint placeholder. Service faults carry a pt:ServiceFault detail with one of PATIENT_NOT_FOUND, APPOINTMENT_NOT_FOUND, INVALID_PATIENT, DUPLICATE_PATIENT, INVALID_APPOINTMENT, or INTERNAL_ERROR. REST APPOINTMENT_CONFLICT (HTTP 409) maps to SOAP INVALID_APPOINTMENT; REST APPOINTMENT_NOT_FOUND (HTTP 404) maps to SOAP APPOINTMENT_NOT_FOUND.</wsdl:documentation><wsdl:port name="HospitalIntegrationSoapPort" binding="tns:HospitalIntegrationSoapBinding"><soap:address location="https://integration-host.example.invalid/soap/HospitalIntegrationService"/></wsdl:port></wsdl:service>
+</wsdl:definitions>

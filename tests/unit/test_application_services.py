@@ -23,6 +23,8 @@ class FakePatientRepository:
         return next((patient for patient in self.patients.values() if patient.cpf == cpf), None)
     def save(self, patient):
         self.patients[patient.id] = patient
+    def list_all(self):
+        return tuple(self.patients.values())
 
 class FakeAppointmentRepository:
     def __init__(self, appointments=(), conflict=False) -> None:

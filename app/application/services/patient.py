@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Callable
 from uuid import UUID, uuid4
 
-from app.application.commands.patient import CreatePatientCommand, GetPatientCommand, UpdatePatientCommand
+from app.application.commands.patient import CreatePatientCommand, GetPatientCommand, ListPatientsCommand, UpdatePatientCommand
 from app.application.errors import DuplicatePatient, InvalidPatientData, PatientNotFound
 from app.application.ports import PatientRepository
-from app.application.results import PatientResult
+from app.application.results.patient import PatientListResult, PatientResult
 from app.domain.entities.patient import Patient
 from app.domain.errors import InvalidPatient
 
@@ -47,6 +47,15 @@ class GetPatientService:
         if patient is None:
             raise PatientNotFound("patient was not found")
         return PatientResult.from_entity(patient)
+
+class ListPatientsService:
+    def __init__(self, repository: PatientRepository) -> None:
+        self._repository = repository
+
+    def execute(self, command: ListPatientsCommand) -> PatientListResult:
+        patients = self._repository.list_all()
+        page = patients[command.offset:command.offset + command.limit]
+        return PatientListResult(tuple(PatientResult.from_entity(patient) for patient in page), command.limit, command.offset, len(patients))
 
 class UpdatePatientService:
     def __init__(self, repository: PatientRepository, clock: Clock = utc_now) -> None:

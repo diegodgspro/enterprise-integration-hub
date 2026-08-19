@@ -18,6 +18,11 @@ class GetPatientCommand:
     patient_id: UUID
 
 @dataclass(frozen=True)
+class ListPatientsCommand:
+    limit: int = 20
+    offset: int = 0
+
+@dataclass(frozen=True)
 class UpdatePatientCommand:
     patient_id: UUID
     name: Optional[str] = None

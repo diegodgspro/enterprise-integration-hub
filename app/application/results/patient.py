@@ -1,7 +1,7 @@
 ﻿"""Patient application result."""
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, Sequence
 from uuid import UUID
 from app.domain.entities.patient import Patient
 
@@ -18,3 +18,10 @@ class PatientResult:
     @classmethod
     def from_entity(cls, patient: Patient) -> "PatientResult":
         return cls(patient.id, patient.name, patient.cpf, patient.birth_date, patient.email, patient.phone, patient.created_at, patient.updated_at)
+
+@dataclass(frozen=True)
+class PatientListResult:
+    items: Sequence[PatientResult]
+    limit: int
+    offset: int
+    total: int

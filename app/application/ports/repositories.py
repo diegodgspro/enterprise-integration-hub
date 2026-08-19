@@ -1,0 +1,20 @@
+﻿"""Repository ports owned by the application layer."""
+from datetime import datetime
+from typing import Optional, Protocol, runtime_checkable
+from uuid import UUID
+from app.domain.entities.appointment import Appointment
+from app.domain.entities.patient import Patient
+
+@runtime_checkable
+class PatientRepository(Protocol):
+    def get_by_id(self, patient_id: UUID) -> Optional[Patient]: ...
+    def get_by_cpf(self, cpf: str) -> Optional[Patient]: ...
+    def save(self, patient: Patient) -> None: ...
+
+@runtime_checkable
+class AppointmentRepository(Protocol):
+    def get_by_id(self, appointment_id: UUID) -> Optional[Appointment]: ...
+    def save(self, appointment: Appointment) -> None: ...
+    def has_conflict(self, patient_id: UUID, appointment_date: datetime) -> bool: ...
+
+

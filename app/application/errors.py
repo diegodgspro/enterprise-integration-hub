@@ -1,0 +1,11 @@
+﻿"""Transport-independent application exceptions."""
+class ApplicationError(Exception): pass
+class ValidationError(ApplicationError): pass
+class InvalidPatientData(ValidationError): pass
+class InvalidAppointmentData(ValidationError): pass
+class NotFoundError(ApplicationError): pass
+class PatientNotFound(NotFoundError): pass
+class AppointmentNotFound(NotFoundError): pass
+class ConflictError(ApplicationError): pass
+class DuplicatePatient(ConflictError): pass
+class AppointmentConflict(ConflictError): pass

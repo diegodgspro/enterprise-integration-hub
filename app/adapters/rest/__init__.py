@@ -1,0 +1,1 @@
+"""Future REST adapter package."""

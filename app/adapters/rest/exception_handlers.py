@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.application.errors import ApplicationError, AppointmentConflict, AppointmentNotFound, DuplicatePatient, InvalidAppointmentData, InvalidPatientData, PatientNotFound
+from app.core.errors import InfrastructureError
 
 def error_response(request: Request, status: int, code: str, message: str) -> JSONResponse:
     correlation_id = getattr(request.state, 'correlation_id', None)
@@ -29,6 +30,10 @@ async def application_error_handler(request: Request, error: ApplicationError) -
     status, code, message = mappings.get(type(error), (500, 'INTERNAL_ERROR', 'An unexpected error occurred.'))
     return error_response(request, status, code, message)
 
+async def infrastructure_error_handler(request: Request, error: InfrastructureError) -> JSONResponse:
+    return error_response(request, 500, 'INTERNAL_ERROR', 'An unexpected error occurred.')
+
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(ApplicationError, application_error_handler)
+    app.add_exception_handler(InfrastructureError, infrastructure_error_handler)

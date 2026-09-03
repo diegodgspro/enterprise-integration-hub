@@ -1,21 +1,39 @@
 '''Composition root for the Enterprise Integration Hub REST application.'''
+import os
 from typing import Optional
 from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
 from app.adapters.persistence.in_memory import InMemoryAppointmentRepository, InMemoryPatientRepository
+from app.adapters.persistence.database import create_postgres_engine, create_session_factory
+from app.adapters.persistence.repositories import PostgresAppointmentRepository, PostgresPatientRepository
 from app.adapters.rest.dependencies import Services
 from app.adapters.rest.exception_handlers import register_exception_handlers
 from app.adapters.rest.router import api_router
 from app.application.services.appointment import CreateAppointmentService, GetAppointmentService
 from app.application.services.patient import CreatePatientService, GetPatientService, ListPatientsService, UpdatePatientService
+from app.application.ports import AppointmentRepository, PatientRepository
 
-def create_app(patient_repository: Optional[InMemoryPatientRepository] = None, appointment_repository: Optional[InMemoryAppointmentRepository] = None) -> FastAPI:
-    patients = patient_repository or InMemoryPatientRepository()
-    appointments = appointment_repository or InMemoryAppointmentRepository()
+def create_app(patient_repository: Optional[PatientRepository] = None, appointment_repository: Optional[AppointmentRepository] = None) -> FastAPI:
+    if (patient_repository is None) != (appointment_repository is None):
+        raise ValueError('patient_repository and appointment_repository must be supplied together')
+    database_url = os.getenv('DATABASE_URL')
+    engine = None
+    if patient_repository is not None and appointment_repository is not None:
+        patients = patient_repository
+        appointments = appointment_repository
+    elif database_url:
+        engine = create_postgres_engine(database_url)
+        session_factory = create_session_factory(engine)
+        patients = PostgresPatientRepository(session_factory)
+        appointments = PostgresAppointmentRepository(session_factory)
+    else:
+        patients = InMemoryPatientRepository()
+        appointments = InMemoryAppointmentRepository()
     application = FastAPI(title='Enterprise Integration Hub', description='API de integração do cenário fictício Hospital Vida Integrada.', version='0.1.0')
     application.state.patient_repository = patients
     application.state.appointment_repository = appointments
+    application.state.database_engine = engine
     application.state.services = Services(
         CreatePatientService(patients), GetPatientService(patients), ListPatientsService(patients),
         UpdatePatientService(patients), CreateAppointmentService(patients, appointments), GetAppointmentService(appointments),

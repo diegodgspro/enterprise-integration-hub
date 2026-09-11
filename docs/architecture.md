@@ -1,199 +1,147 @@
-# Arquitetura — Enterprise Integration Hub
+# Architecture — Enterprise Integration Hub
 
-## Visão geral
+## Overview
 
-O Enterprise Integration Hub será uma plataforma de interoperabilidade entre sistemas legados SOAP/XML e consumidores modernos REST/JSON. Esta é uma arquitetura-alvo para orientar as próximas fases: não há código de aplicação, endpoints, persistência, dependências ou infraestrutura implementados nesta etapa.
+Enterprise Integration Hub is a healthcare interoperability portfolio built around ports and adapters. The current codebase includes an executable FastAPI REST boundary, transport-independent application services, domain entities, in-memory repositories, PostgreSQL repositories, SQLAlchemy mappings, an Alembic migration and automated tests.
 
-A arquitetura escolhida combina camadas de responsabilidade com Ports and Adapters (arquitetura hexagonal): adaptadores de entrada convertem protocolos externos para comandos internos; a camada de aplicação orquestra casos de uso; o domínio preserva as regras de negócio; e adaptadores de saída isolam persistência e futuras integrações externas.
+OpenAPI, WSDL and XSD artifacts define the external contracts. The REST adapter is implemented. The SOAP adapter remains a planned boundary and is not represented as an executable service.
 
 ```mermaid
 flowchart TB
-    RestClient[Consumidor REST/JSON] --> RestAdapter[REST Adapter]
-    SoapClient[Sistema legado SOAP/XML] --> SoapAdapter[SOAP Adapter]
-
-    RestAdapter --> Core[Application / Integration Core]
-    SoapAdapter --> Core
-    RestAdapter -. não depende diretamente .-> SoapAdapter
-    SoapAdapter -. não depende diretamente .-> RestAdapter
-
-    Core --> Domain[Domain]
-    Core --> RepoPort[Repository ports]
-    RepoPort --> RepoAdapter[Repository adapter]
-    RepoAdapter --> PostgreSQL[(PostgreSQL futuro)]
+    REST["REST / JSON client"] --> RA["FastAPI adapter"]
+    SOAP["SOAP / XML client"] -. future .-> SA["SOAP adapter"]
+    RA --> APP["Application services"]
+    SA --> APP
+    APP --> DOMAIN["Domain entities"]
+    APP --> PORTS["Repository ports"]
+    PORTS --> MEM["In-memory repositories"]
+    PORTS --> PG["PostgreSQL repositories"]
 ```
 
-REST e SOAP são fronteiras independentes. Não haverá conversão direta REST → SOAP nem SOAP → REST: ambos os fluxos passam por comandos, resultados e modelos internos independentes de transporte.
+REST and SOAP are independent input boundaries. They do not convert directly into each other. Each adapter maps its transport-specific request into internal commands, invokes the same application services and maps results or errors back to its own protocol.
 
-## Contract-first architecture
-
-Os contratos existentes são as fontes de verdade nas bordas:
-
-- [OpenAPI](../contracts/openapi/openapi.yaml) define a interface REST/JSON.
-- [WSDL](../contracts/soap/service.wsdl) e seus XSDs, incluindo [Patient](../contracts/soap/xsd/patient.xsd) e [Appointment](../contracts/soap/xsd/appointment.xsd), definem a interface SOAP/XML.
-
-Os contratos não definem o modelo interno nem as entidades do domínio. Eles orientam validadores e mapeadores específicos de cada adaptador. Alterações incompatíveis deverão ser publicadas em uma nova versão de contrato, com uma estratégia explícita de convivência.
-
-## Application Architecture
-
-### Estrutura proposta
-
-Não é recomendável criar ainda a estrutura no repositório: ela deve nascer junto da primeira implementação aprovada.
+## Implementation map
 
 ```text
 app/
-├── main.py
-├── core/
-├── domain/
+├── main.py                         # composition root and Correlation ID middleware
+├── core/                           # technical infrastructure errors
+├── domain/                         # Patient and Appointment entities and rules
 ├── application/
+│   ├── commands/                   # transport-independent input models
+│   ├── results/                    # transport-independent output models
+│   ├── services/                   # use-case orchestration
+│   └── ports/                      # repository interfaces
 ├── adapters/
-│   ├── rest/
-│   ├── soap/
-│   └── persistence/
-└── schemas/
+│   ├── rest/                       # implemented FastAPI boundary
+│   ├── persistence/                # in-memory and PostgreSQL adapters
+│   └── soap/                       # placeholder for the future runtime adapter
+└── schemas/                        # REST request and response schemas
 ```
 
-`main.py` será responsável pela composição da aplicação e pelo ciclo de vida. `adapters/rest` será responsável pela borda HTTP/JSON, incluindo rotas/controllers e mapeamentos. Não haverá uma camada `api/` separada.
+## Dependency direction
 
-### Responsabilidades e direção de dependências
+| Layer | Responsibility | Dependencies |
+|---|---|---|
+| Domain | Entities, invariants and business rules | Domain code and standard library |
+| Application | Commands, results, use cases and ports | Domain and application-owned interfaces |
+| REST adapter | HTTP/JSON validation and response/error mapping | Application, schemas and FastAPI |
+| Persistence adapters | Repository implementations and mappings | Application ports, SQLAlchemy and PostgreSQL |
+| Composition root | Select implementations and assemble services | Adapters and application services |
 
-| Camada | Responsabilidade | Pode depender de |
-| --- | --- | --- |
-| Domain | Entidades, invariantes e regras de negócio puras | Apenas código do próprio domínio e biblioteca padrão quando possível |
-| Application / Integration Core | Orquestração dos casos de uso e aplicação das regras de negócio da camada de aplicação, comandos e portas | Domain e interfaces declaradas pela própria application |
-| Adapters de entrada | Validar/interpretar protocolo, mapear entrada e saída, traduzir erros | Application, schemas e componentes técnicos de borda |
-| Adapters de saída | Implementar portas para banco e serviços externos | Interfaces da application, biblioteca/SDK técnico e infraestrutura |
-| Core | Configuração, composição de dependências, correlação e observabilidade | Componentes técnicos; não contém regra de negócio |
+Dependencies point inward. Domain entities do not import FastAPI, Pydantic, SQLAlchemy, PostgreSQL, XML or SOAP libraries. Application services receive repository ports and remain transport-independent.
 
-As dependências apontam para dentro. Em especial, `domain` não importa `application`, `adapters`, `schemas` ou `core`; `application` não importa FastAPI, Pydantic, SOAP, XML, HTTP, PostgreSQL nem um driver específico.
+## Composition and persistence selection
 
-### Domain
+`app/main.py` is the composition root.
 
-O domínio conterá `Patient` e `Appointment` como entidades de negócio e, quando necessário, value objects para conceitos com invariantes próprias, como identificadores e horários. Ele expressará regras que devem valer independentemente de o pedido chegar em JSON, XML, fila ou linha de comando.
+- Explicit repositories can be injected into `create_app` for controlled tests.
+- When `DATABASE_URL` is present, the application creates PostgreSQL repository adapters.
+- Without `DATABASE_URL`, the application uses in-memory repositories.
 
-Para manter essa independência, as entidades receberão tipos primitivos ou tipos do próprio domínio, e retornarão resultados ou erros do domínio. Serialização, anotações de framework, modelos Pydantic, objetos de request/response HTTP, elementos XML e modelos de banco ficam fora dessa camada. O domínio também não executa SQL, não conhece tabelas e não emite respostas HTTP ou SOAP Faults.
+The PostgreSQL adapter uses SQLAlchemy 2 and psycopg. The Alembic migration creates `patients` and `appointments`, including UUID primary keys, CPF uniqueness, the patient foreign key, an appointment status constraint and an index on `patient_id`.
 
-### Application / Integration Core
+## REST boundary
 
-O Integration Core é a camada de aplicação. Ela materializa os casos de uso e define a linguagem comum usada por REST e SOAP. Sua responsabilidade futura é:
+The FastAPI adapter currently implements health, patient and appointment endpoints. REST schemas validate input and serialize results. Exception handlers translate application failures into stable HTTP status codes and error payloads.
 
-- receber comandos internos, como `CreatePatient`, `GetPatient`, `CreateAppointment` e `GetAppointment`;
-- validar pré-condições de aplicação e invocar as regras do domínio;
-- orquestrar entidades, repositories e portas para serviços externos;
-- controlar limites transacionais quando a persistência for introduzida;
-- devolver resultados internos, nunca `Response`, JSON, XML ou objetos de framework.
+The adapter does not contain domain rules and does not access database tables directly. It obtains application services from the composed application state.
 
-Interfaces (portas) a serem declaradas pela camada de aplicação, sem implementação nesta fase:
+## SOAP boundary
+
+The WSDL, XSD files and XML examples describe the intended SOAP operations and faults. The runtime adapter is not yet implemented.
+
+When added, it must:
+
+1. Validate incoming XML against the versioned contracts.
+2. Map SOAP messages to the existing application commands.
+3. Invoke the same application services used by REST.
+4. Map application results to SOAP responses.
+5. Translate known application failures to contract-compatible SOAP Faults.
+
+It must not call REST endpoints internally or duplicate domain rules.
+
+## Repository ports
+
+Application-owned ports isolate use cases from persistence technology.
 
 ```text
 PatientRepository
-  - get_by_id(patient_id) -> Patient | None
-  - get_by_document(document) -> Patient | None
-  - save(patient) -> Patient
+  - get_by_id(patient_id)
+  - get_by_cpf(cpf)
+  - save(patient)
+  - list_all()
 
 AppointmentRepository
-  - get_by_id(appointment_id) -> Appointment | None
-  - has_conflict(patient_id, scheduled_at, ...) -> bool
-  - save(appointment) -> Appointment
+  - get_by_id(appointment_id)
+  - has_conflict(patient_id, appointment_date)
+  - save(appointment)
 ```
 
-As assinaturas finais deverão ser refinadas pelos casos de uso e invariantes aprovados. Os services da aplicação recebem essas interfaces por injeção de dependência; a futura implementação PostgreSQL será apenas um adapter de saída de `persistence`.
+In-memory and PostgreSQL implementations satisfy these ports. Explicit mapping functions translate between domain entities and SQLAlchemy models.
 
-### REST Adapter
+## Error handling
 
-O REST Adapter é somente uma porta de entrada. Ele deverá receber HTTP, obter ou criar o Correlation ID, validar a requisição contra o contrato e schema de borda, converter JSON para um comando interno, chamar o service da aplicação e converter o resultado para JSON/HTTP.
-
-Ele também fará o mapeamento de erros de aplicação para status e payloads HTTP. Não acessará repositories ou PostgreSQL diretamente, não conterá regra de negócio e não executará transformação SOAP.
-
-### SOAP Adapter
-
-O SOAP Adapter é uma porta de entrada independente. Ele deverá receber envelopes XML, obter ou criar o Correlation ID do header SOAP, validar mensagens conforme WSDL/XSD, convertê-las para o mesmo comando interno usado pelo REST Adapter e chamar o service da aplicação.
-
-O resultado interno será transformado para a resposta XML definida pelo contrato. Falhas conhecidas serão convertidas para SOAP Faults compatíveis. O adapter não acessará repositories ou PostgreSQL, não conterá regras de negócio e não conhecerá HTTP/REST.
-
-### Repository e persistência
-
-`PatientRepository` e `AppointmentRepository` são portas de saída da aplicação. Elas descrevem as operações necessárias ao negócio, em termos de entidades e value objects, e não em termos de tabelas, SQL ou driver.
-
-O futuro adapter de persistência implementará essas portas e será o único lugar que conhecerá PostgreSQL, SQL, ORM ou mapeamentos de banco. A composição em `core` fornecerá essa implementação aos services da aplicação. Nesta fase não há banco, schema físico, migration ou código de persistência.
-
-### Transformações
-
-Os mapeadores vivem nas bordas, próximos ao protocolo que entendem:
-
-| Transformação | Responsável futuro |
-| --- | --- |
-| JSON → comando/modelo interno | REST Adapter, com DTO/schema REST em `schemas` |
-| XML → comando/modelo interno | SOAP Adapter, com DTO/schema SOAP em `schemas` |
-| resultado/modelo interno → JSON | REST Adapter |
-| resultado/modelo interno → XML | SOAP Adapter |
-
-Os modelos internos não precisam espelhar um payload JSON ou XML. A camada de aplicação decide o resultado do caso de uso; cada adapter faz a projeção que seu contrato exige. Assim, alterações de XML não exigem mudanças no REST, e alterações de JSON não exigem mudanças no SOAP.
-
-### Tratamento de erros
-
-Erros esperados serão definidos com semântica de negócio, sem metadados de transporte. A hierarquia sugerida é:
+Expected failures use application-level semantics that do not contain HTTP or SOAP objects.
 
 ```text
 ApplicationError
-├── ValidationError
-│   ├── InvalidPatient
-│   └── InvalidAppointment
-├── NotFoundError
-│   ├── PatientNotFound
-│   └── AppointmentNotFound
-└── ConflictError
-    ├── DuplicatePatient
-    └── AppointmentConflict
+├── InvalidPatientData
+├── InvalidAppointmentData
+├── PatientNotFound
+├── AppointmentNotFound
+├── DuplicatePatient
+└── AppointmentConflict
 ```
 
-Erros estritamente ligados a invariantes podem originar no domínio e ser traduzidos para um erro de aplicação pelo caso de uso. Falhas inesperadas de infraestrutura não devem expor detalhes internos e serão registradas com o Correlation ID.
+The REST adapter maps these errors to HTTP responses. The future SOAP adapter will map the same semantics to the faults defined in the WSDL/XSD contract. Unexpected persistence failures are translated to safe infrastructure errors without exposing database details.
 
-O REST Adapter converte esses erros para HTTP — por exemplo, `PatientNotFound` em 404, conflitos em 409 e dados inválidos em 422. O SOAP Adapter os converte para SOAP Faults com códigos previstos pelo contrato, como `PATIENT_NOT_FOUND`, `DUPLICATE_PATIENT`, `INVALID_PATIENT`, `APPOINTMENT_NOT_FOUND`, `INVALID_APPOINTMENT` e `APPOINTMENT_CONFLICT`. O mapeamento é responsabilidade exclusiva dos adapters.
+## Correlation ID
 
-### Correlation ID
+FastAPI middleware accepts `X-Correlation-ID` from the caller or generates a UUID when it is absent. The value is returned in the response and placed in request state.
 
-O Correlation ID será tratado como contexto de execução técnico, não como regra de domínio. Na entrada REST, o adapter/middleware aceitará `X-Correlation-ID` quando válido ou criará um identificador novo. Na entrada SOAP, o SOAP Adapter extrairá o identificador do header SOAP acordado ou criará um novo quando ele estiver ausente.
+The next observability increment should validate the accepted header format and propagate the identifier through structured logs and future outbound integrations. A SOAP implementation should apply the same concept through an agreed SOAP header.
 
-Ambos propagam o valor como um `correlation_id` interno associado ao comando ou a um contexto de requisição da camada de aplicação. Services, adapters de saída e logs estruturados o usarão para rastreabilidade. As respostas poderão devolvê-lo no header correspondente. Nenhuma entidade de domínio deverá depender dele.
+## Testing strategy
 
-### Estratégia de testes
+| Test area | Current evidence |
+|---|---|
+| Domain | Entity invariants and valid state transitions |
+| Application | Use cases with repository fakes and deterministic IDs/timestamps |
+| REST | Endpoints, validation, error responses, contracts and Correlation ID |
+| Persistence | Mappings, constraints, repository behavior and safe infrastructure failures |
 
-| Tipo | Objetivo | Escopo principal |
-| --- | --- | --- |
-| `tests/unit/` | Verificar regras de domínio, casos de uso e mapeadores isoladamente | Entidades, services da application, erros e conversores |
-| `tests/integration/` | Verificar colaboração entre camadas e adapters com implementações controladas | Adapter → application → repository adapter; comportamento de falhas e correlação |
-| `tests/contract/` | Garantir aderência das bordas aos contratos versionados | OpenAPI para REST; WSDL e XSD para SOAP; exemplos de `contracts/examples/` quando aplicáveis |
+The persistence tests currently exercise mappings and repository behavior with controlled test doubles. A future Docker-based suite should run the Alembic migration and repository operations against an ephemeral PostgreSQL instance.
 
-Testes de contrato devem validar requisições e respostas REST contra OpenAPI e mensagens SOAP contra WSDL/XSD, incluindo os formatos de erro previstos. Eles não substituem testes unitários de regra de negócio nem testes de integração de persistência quando ela existir.
+## Next architectural increments
 
-## Fluxos futuros
+1. Implement the SOAP adapter against the existing WSDL and XSD artifacts.
+2. Add structured logging and Correlation ID propagation.
+3. Add authentication and authorization at the adapters.
+4. Add Docker and a real PostgreSQL integration-test environment.
+5. Add CI for unit, REST, contract and database integration tests.
+6. Publish a deployment runbook and stable release.
 
-### Fluxo REST
+## Scope
 
-1. O consumidor envia uma requisição HTTP/JSON ao REST Adapter.
-2. O adapter obtém ou cria o `X-Correlation-ID`, valida o contrato/schema e mapeia JSON para um comando interno.
-3. O Integration Core executa o caso de uso, aplica regras do domínio e usa as portas de repository necessárias.
-4. O adapter de persistência, quando existir, implementa a porta e interage com PostgreSQL.
-5. O REST Adapter converte o resultado para JSON/HTTP ou converte um erro de aplicação para a resposta HTTP apropriada.
-
-### Fluxo SOAP
-
-1. O sistema legado envia envelope SOAP/XML ao SOAP Adapter.
-2. O adapter obtém ou cria o Correlation ID, valida WSDL/XSD e mapeia XML para o mesmo comando interno.
-3. O Integration Core executa o mesmo caso de uso, regras de domínio e portas de repository do fluxo REST.
-4. O adapter de persistência, quando existir, implementa a porta e interage com PostgreSQL.
-5. O SOAP Adapter converte o resultado para XML ou converte um erro de aplicação para uma SOAP Fault compatível.
-
-## Decisões desta fase
-
-| Decisão | Justificativa |
-| --- | --- |
-| Application como núcleo de integração | Centraliza orquestração e evita que protocolos contenham casos de uso. |
-| Domain puro | Mantém regras de Patient e Appointment portáveis e testáveis sem framework. |
-| Ports para repositories | Permite introduzir PostgreSQL sem acoplar a aplicação a SQL ou ORM. |
-| Mapeamento por adapter | Impede dependência direta entre REST e SOAP. |
-| Correlation ID no contexto técnico | Garante rastreabilidade sem poluir entidades ou regras de negócio. |
-
-## Fora do escopo desta etapa
-
-Esta documentação não introduz implementação de endpoints REST ou SOAP, dependências, ambiente virtual, banco de dados, PostgreSQL, migrations, Docker, SQL, adapters executáveis ou alterações nos contratos. Nenhum commit ou push faz parte desta fase.
+Hospital Vida Integrada is fictional. All examples use synthetic data. The project contains no production healthcare records, employer code or credentials.

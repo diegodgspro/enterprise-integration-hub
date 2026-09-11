@@ -1,116 +1,153 @@
 # Enterprise Integration Hub
 
-## Contract Consistency
+A healthcare integration portfolio demonstrating how modern REST consumers and versioned SOAP contracts can share transport-independent business rules.
 
-REST e SOAP têm formatos e protocolos diferentes, mas preservam as mesmas regras de negócio para identificadores, campos obrigatórios, limites e validações de Patient e Appointment. Quando e-mail ou telefone não estiverem disponíveis em uma resposta de paciente, o campo REST é omitido e o elemento SOAP também é omitido. O mapeamento de erros mantém uma semântica comum nas duas bordas; detalhes de implementação permanecem fora dos contratos.
+The project uses a ports-and-adapters architecture to keep domain and application logic independent from HTTP, JSON, XML, SOAP and database technologies.
 
-| REST | SOAP | Regra |
-| --- | --- | --- |
-| HTTP 404 `PATIENT_NOT_FOUND` | `PATIENT_NOT_FOUND` | O paciente solicitado não existe. |
-| HTTP 404 `APPOINTMENT_NOT_FOUND` | `APPOINTMENT_NOT_FOUND` | O agendamento solicitado não existe. |
-| HTTP 409 `DUPLICATE_PATIENT` | `DUPLICATE_PATIENT` | Já existe paciente para o CPF informado. |
-| HTTP 409 `APPOINTMENT_CONFLICT` | `INVALID_APPOINTMENT` | O horário solicitado não está disponível. |
-| HTTP 422 `VALIDATION_ERROR` | `INVALID_PATIENT` | Dados de paciente violam o contrato; validações de agendamento usam `INVALID_APPOINTMENT`. |
-| HTTP 500 `INTERNAL_ERROR` | `INTERNAL_ERROR` | Falha interna sem detalhes técnicos expostos. |
+## Current implementation status
 
-## Contract-First
+| Capability | Status |
+|---|---|
+| FastAPI REST application | Implemented |
+| Patient and appointment use cases | Implemented |
+| In-memory repositories | Implemented |
+| PostgreSQL repositories | Implemented |
+| SQLAlchemy mappings | Implemented |
+| Alembic migration | Implemented |
+| Correlation ID middleware | Implemented |
+| REST error mapping | Implemented |
+| OpenAPI contract and examples | Versioned |
+| WSDL, XSD and SOAP examples | Versioned |
+| Executable SOAP adapter | Planned |
+| Authentication and authorization | Planned |
+| Docker and CI/CD | Planned |
 
-Contract-first significa definir, revisar e versionar os contratos de integração antes de implementar os adapters ou regras de aplicação. No Hospital Vida Integrada, isso estabelece uma fronteira clara entre o sistema legado SOAP/XML, os consumidores REST/JSON e o futuro núcleo de integração.
+> The REST and persistence layers are executable. SOAP is currently represented by versioned contracts and examples; no SOAP runtime endpoint is claimed.
 
-Contratos reduzem ambiguidades, permitem validação independente e oferecem uma base estável para as equipes consumidoras. O OpenAPI descreve recursos REST, mensagens JSON e respostas HTTP; WSDL e XSD descrevem operações SOAP, envelopes XML, tipos e faults. Nas próximas fases, os adapters REST e SOAP serão implementados contra estes artefatos, sem alterar o modelo conceitual de Patient e Appointment.
+## Business problem
 
-## Contratos
+Healthcare organizations often need to exchange information between legacy systems and modern applications. These systems may use different protocols, data formats and error models, increasing maintenance cost and the risk of inconsistent business rules.
 
-| Interface | Contrato | Formato |
-| --- | --- | --- |
-| REST | [OpenAPI](contracts/openapi/openapi.yaml) | JSON/HTTP |
-| SOAP | [WSDL](contracts/soap/service.wsdl) | XML/SOAP |
-| XML | [XSD](contracts/soap/xsd/patient.xsd) e [XSD](contracts/soap/xsd/appointment.xsd) | XML |
+Enterprise Integration Hub models an intermediary application in which REST and future SOAP adapters translate transport-specific messages into the same internal commands and results.
 
-Os exemplos de mensagens REST e SOAP estão em [contracts/examples](contracts/examples/).
+## Architecture
 
-Uma fundação de portfólio profissional para demonstrar integração de sistemas corporativos de saúde. O projeto conectará sistemas hospitalares legados baseados em SOAP/XML a aplicações modernas orientadas a REST/JSON, preservando uma camada de integração explícita e auditável.
-
-> Estado atual: fundação arquitetural e documental. Nenhum endpoint REST ou SOAP, banco de dados funcional ou dependência de aplicação foi implementado nesta etapa.
-
-## Problema de negócio
-
-Organizações de saúde frequentemente precisam trocar informações entre sistemas legados e produtos mais recentes. Os sistemas podem usar contratos, formatos de dados e protocolos distintos, o que aumenta o custo de manutenção e o risco de inconsistências.
-
-O Enterprise Integration Hub propõe uma camada intermediária que recebe e expõe SOAP/XML e REST/JSON, transforma dados para um modelo interno e, futuramente, coordena a persistência em PostgreSQL. A proposta permite modernizar integrações sem exigir a substituição imediata dos sistemas legados.
-
-## Cenário empresarial
-
-Um sistema hospitalar legado envia uma solicitação SOAP/XML. O Hub a valida contra os contratos definidos, converte o conteúdo para um objeto interno e encaminha a operação à interface REST. No sentido inverso, consumidores REST recebem JSON enquanto o Hub adapta a resposta ao contrato SOAP/XML esperado pelo legado.
-
-## Objetivo
-
-Demonstrar, de forma progressiva e reproduzível, boas práticas de integração corporativa: contratos bem definidos, separação de responsabilidades, autenticação, rastreabilidade, tratamento consistente de erros e testes automatizados.
-
-## Arquitetura
-
-```text
-Legacy Hospital System
-        |
-     SOAP/XML
-        v
-SOAP Web Service
-        |
-        v
-Integration Layer <----> REST API <----> PostgreSQL
-        |
-  XML <-> modelo interno <-> JSON
+```mermaid
+flowchart TB
+    REST["REST / JSON"] --> RA["FastAPI adapter"]
+    SOAP["SOAP / XML contracts"] -. planned runtime .-> SA["SOAP adapter"]
+    RA --> APP["Application services"]
+    SA --> APP
+    APP --> DOMAIN["Domain"]
+    APP --> PORTS["Repository ports"]
+    PORTS --> MEM["In-memory adapter"]
+    PORTS --> PG["PostgreSQL adapter"]
 ```
 
-O detalhamento dos componentes e fluxos está em [docs/architecture.md](docs/architecture.md).
+The domain and application layers do not depend on FastAPI, Pydantic, SQLAlchemy, PostgreSQL or SOAP libraries. Adapters translate requests, persistence records and errors at the system boundaries.
 
-## Tecnologias planejadas
+See [docs/architecture.md](docs/architecture.md) for implementation details and boundaries.
+
+## Implemented REST API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/health` | Health check |
+| `GET` | `/api/v1/patients` | List patients |
+| `POST` | `/api/v1/patients` | Create a patient |
+| `GET` | `/api/v1/patients/{patient_id}` | Retrieve a patient |
+| `PUT` | `/api/v1/patients/{patient_id}` | Update a patient |
+| `POST` | `/api/v1/appointments` | Create an appointment |
+| `GET` | `/api/v1/appointments/{appointment_id}` | Retrieve an appointment |
+
+The API returns consistent validation, not-found, conflict and internal-error payloads. Requests and responses include an `X-Correlation-ID`, preserving a valid caller-provided value or generating a UUID.
+
+## Contract-first boundaries
+
+| Interface | Artifact | Runtime status |
+|---|---|---|
+| REST | [OpenAPI](contracts/openapi/openapi.yaml) | Implemented with FastAPI |
+| SOAP | [WSDL](contracts/soap/service.wsdl) | Contract only |
+| XML | [Patient XSD](contracts/soap/xsd/patient.xsd) and [Appointment XSD](contracts/soap/xsd/appointment.xsd) | Contract only |
+
+Request and response examples are available in [contracts/examples](contracts/examples/).
+
+## Technology stack
 
 - Python
-- FastAPI, para a futura API REST e documentação OpenAPI
-- Biblioteca SOAP compatível com WSDL e XSD (a ser selecionada na fase de implementação)
-- PostgreSQL
-- Docker e Docker Compose
-- Pytest
-- JWT para autenticação de consumidores REST, conforme os requisitos da fase de segurança
-- Postman para coleções e cenários de integração
+- FastAPI and Pydantic
+- SQLAlchemy 2
+- PostgreSQL with psycopg
+- Alembic
+- OpenAPI 3
+- WSDL and XSD
+- Standard-library unittest and FastAPI TestClient
 
-Nenhuma dependência é declarada nesta fase; elas serão introduzidas apenas quando houver uma necessidade funcional concreta.
+## Run locally
 
-## Fluxo de integração
+Create a virtual environment and install the dependencies:
 
-1. Um consumidor legado chama a interface SOAP usando XML.
-2. A interface SOAP valida e delega a solicitação à camada de integração.
-3. A camada transforma XML em um modelo interno independente de transporte.
-4. A interface REST usa o modelo interno e, em fases futuras, coordena o acesso ao PostgreSQL.
-5. As respostas percorrem o caminho inverso, convertendo o modelo interno em JSON ou XML conforme o consumidor.
-
-## Estrutura inicial
-
-```text
-.
-├── docs/
-│   ├── architecture/
-│   ├── examples/
-│   ├── screenshots/
-│   └── architecture.md
-├── .env.example
-├── .gitignore
-├── CONTRIBUTING.md
-└── README.md
+```bash
+python -m venv .venv
+python -m pip install -r requirements.txt
 ```
+
+Start the API with the default in-memory repositories:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Open `http://127.0.0.1:8000/docs` for the generated API documentation.
+
+## PostgreSQL
+
+Set a PostgreSQL connection string and apply the migration before starting the API:
+
+```bash
+export DATABASE_URL="postgresql+psycopg://user:password@localhost:5432/integration_hub"
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+Use the equivalent environment-variable syntax on Windows PowerShell. Without `DATABASE_URL`, the application intentionally uses in-memory repositories.
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -p "test*.py"
+```
+
+The current suite covers domain entities, transport-independent application services, REST behavior, validation and error semantics, correlation IDs, persistence mappings and PostgreSQL repository behavior with controlled test doubles.
+
+## Contract consistency
+
+REST and SOAP use different protocols while preserving shared rules for identifiers, required fields, limits and business errors. The executable SOAP adapter will map the same application errors to the faults already defined by the SOAP contract.
+
+| REST | SOAP contract | Meaning |
+|---|---|---|
+| HTTP 404 `PATIENT_NOT_FOUND` | `PATIENT_NOT_FOUND` | Patient does not exist |
+| HTTP 404 `APPOINTMENT_NOT_FOUND` | `APPOINTMENT_NOT_FOUND` | Appointment does not exist |
+| HTTP 409 `DUPLICATE_PATIENT` | `DUPLICATE_PATIENT` | CPF is already registered |
+| HTTP 409 `APPOINTMENT_CONFLICT` | `INVALID_APPOINTMENT` | Requested time is unavailable |
+| HTTP 422 `VALIDATION_ERROR` | `INVALID_PATIENT` or `INVALID_APPOINTMENT` | Input violates the contract |
+| HTTP 500 `INTERNAL_ERROR` | `INTERNAL_ERROR` | Internal failure without implementation details |
 
 ## Roadmap
 
-- [x] Fundação do repositório e documentação arquitetural
-- [x] Definir contratos de integração (OpenAPI, WSDL e XSD) — Fase 2 concluída
-- [ ] Criar a estrutura de aplicação Python e as interfaces REST e SOAP
-- [ ] Implementar modelo interno, transformações XML/JSON e tratamento de erros
-- [ ] Adicionar persistência PostgreSQL e migrações
-- [ ] Implementar JWT, logs estruturados e Correlation ID
-- [ ] Criar testes automatizados e coleções Postman
-- [ ] Containerizar a aplicação e documentar a execução local
+- [x] Establish the repository and architectural boundaries
+- [x] Version OpenAPI, WSDL and XSD contracts
+- [x] Implement domain entities and application services
+- [x] Implement the FastAPI REST adapter and error mapping
+- [x] Add in-memory and PostgreSQL repository adapters
+- [x] Add SQLAlchemy mappings and an Alembic migration
+- [x] Add automated domain, application, REST and persistence tests
+- [ ] Implement and validate the executable SOAP adapter
+- [ ] Add authentication and authorization
+- [ ] Add structured logging around the existing Correlation ID
+- [ ] Add Docker, CI and reproducible PostgreSQL integration tests
+- [ ] Publish a documented deployment and stable release
 
-## Próximos passos
+## Scope and data
 
-Após a revisão desta fundação, a próxima fase deve começar pelos contratos e pela estrutura de aplicação, mantendo REST, SOAP e persistência desacoplados da lógica de transformação.
+Hospital Vida Integrada is a fictional scenario. All names, identifiers and examples are synthetic. This repository contains no employer code, credentials or real patient data.
